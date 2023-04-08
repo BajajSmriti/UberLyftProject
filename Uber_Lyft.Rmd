@@ -1,0 +1,220 @@
+---
+title: "Uber_Lyft.Rmd"
+output:
+  pdf_document: default
+  html_document: default
+date: "2023-03-11"
+---
+
+## Loading and pre-processing the dataset
+
+```{r}
+# Importing libraries
+library(RCurl) # for downloading the iris CSV file
+library(randomForest)
+library(caret)
+library(modelr)
+
+# Importing the Rideshare data set
+data <- read.csv("./rideshare_kaggle.csv")
+```
+
+```{r}
+# Checking Na values per column- price has it
+colSums(is.na(data))
+```
+
+```{r}
+# Omitting rows containing Na values
+data <- na.omit(data)
+```
+
+```{r}
+# Checking for duplicate rows
+data[duplicated(data), ]
+```
+
+
+```{r}
+# Checking for duplicate values in columns
+identical(data$visibility, data$visibility.1)
+```
+
+
+```{r}
+# Dropping the duplicate column
+data <- subset(data, select = -c(visibility.1))
+```
+
+
+```{r}
+# Checking for outliers using the IQR method 
+Qp12 <- quantile(data$price, 0.25)
+Qp32 <- quantile(data$price, 0.75)
+IQRp <- Qp32 - Qp12
+data[data$price > (Qp32 + (1.5*IQRp)), ]
+```
+
+```{r}
+# Checking for the second range
+data[data$price < (Qp12 - (1.5*IQRp)), ]
+```
+
+```{r}
+# We can see that we have 5589 data outliers. We can drop them.
+data <- data[!(data$price > (Qp32 + (1.5 * IQRp))), ]
+```
+
+
+
+```{r}
+# Selecting the best correlated features with price.
+data <- data[c('price', 'distance', 'surge_multiplier', 'cab_type', 'name')]
+```
+
+
+```{r}
+
+# Copy the data
+new_df_onehot <- data
+
+# Get the categorical columns and perform one-hot encoding
+cat_cols <- names(new_df_onehot)[sapply(new_df_onehot, is.factor)]
+
+for (col in cat_cols) {
+  one_hot_cols <- model.matrix(~ 0 + new_df_onehot[[col]])
+  colnames(one_hot_cols) <- paste0(col, "_", colnames(one_hot_cols))
+  new_df_onehot <- cbind(new_df_onehot, one_hot_cols)
+}
+
+# Remove the original categorical columns
+new_df_onehot <- new_df_onehot[, !names(new_df_onehot) %in% cat_cols]
+
+```
+
+
+
+```{r}
+# Performs stratified random split of the data set
+TrainingIndex <- createDataPartition(new_df_onehot$price, p=0.8, list = FALSE)
+TrainingSet <- new_df_onehot[TrainingIndex,] # Training Set
+TestingSet <- new_df_onehot[-TrainingIndex,] # Test Set
+
+write.csv(TrainingSet, "training.csv")
+write.csv(TestingSet, "testing.csv")
+
+TrainSet <- read.csv("training.csv", header = TRUE)
+TrainSet <- TrainSet[,-1]
+TestSet <- read.csv("testing.csv", header = TRUE)
+# TestSet <- TestSet[,-1]
+```
+
+## Modeling the data to predict the price
+
+```{r}
+# Building Random forest model
+model1 <- randomForest(price ~ ., data = TrainSet, ntree = 100, importance = TRUE)
+```
+
+
+```{r}
+# Testing Random forest model's RMSE with the TestSet
+modelr::rmse(model1, data=TestSet)
+```
+
+
+```{r}
+# Building Linear regression model
+model2 <- lm(price ~ ., data = TrainSet)
+```
+
+
+```{r}
+# summary(model2)[["r.squared"]]
+modelr::rmse(model2, data=TestSet)
+```
+
+
+```{r}
+# Save the linear model to RDS file
+saveRDS(model2, "model.rds")
+```
+
+## Building the Shiny app for forecasting the price
+
+```{r}
+library(shiny)
+library(dplyr)
+
+# Load the saved model
+model <- readRDS("model.rds")
+
+# Creating the UI
+ui <- fluidPage(
+  
+  # App title
+  titlePanel("Cab Stats and Price Predictor"),
+  
+  # Sidebar with options and input fields
+  sidebarLayout(
+    sidebarPanel(
+        selectInput("cabtype", "Select a cab type:", choices = unique(new_df_onehot$cab_type)),
+      numericInput("distance", "Enter the distance:", min = 0, value = 1),
+      numericInput("surge", "Enter the surge multiplier:", min = 1, max = 3, value = 1),
+      uiOutput("nameinput")
+    ),
+    
+    # Output: Table of average price, distance, and surge multiplier for each cab name, and price prediction
+    mainPanel(
+      tabsetPanel(
+        tabPanel("Cab Stats", tableOutput("cabstats")),
+        tabPanel("Price Prediction", verbatimTextOutput("price"))
+      )
+    )
+  )
+)
+```
+
+```{r}
+# Creating the Server to expose the UI on web(client side)
+server <- function(input, output) {
+  
+  # Get the unique names of the selected cab type
+  names <- reactive({
+    new_df_onehot %>%
+      filter(cab_type == input$cabtype) %>%
+      pull(name) %>%
+      unique()
+  })
+  
+  # Render the dynamic UI element to select cab name
+  output$nameinput <- renderUI({
+    selectInput("name", "Select a cab name:", choices = names())
+  })
+  
+  # Subset the data based on user input
+  cab_data <- reactive({
+    new_df_onehot %>% 
+      filter(cab_type == input$cabtype, name == input$name) %>% 
+      summarise(avg_price = mean(price), avg_distance = mean(distance), avg_surge = mean(surge_multiplier))
+  })
+  
+  # Render the table of cab stats
+  output$cabstats <- renderTable({
+    cab_data()
+  })
+  
+  # Predict price based on user input
+  output$price <- renderText({
+    new_data <- data.frame(distance = input$distance, surge_multiplier = input$surge, cab_type = input$cabtype, name = input$name)
+    prediction <- predict(model, newdata = new_data)
+    paste("The predicted price for a", input$cabtype, "cab with a distance of", input$distance, "and a surge multiplier of", input$surge, "is:", round(prediction, 2))
+  })
+  
+}
+
+shinyApp(ui = ui, server = server)
+
+
+```
+
