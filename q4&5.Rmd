@@ -1,0 +1,307 @@
+---
+title: "Q4 AND 5"
+output: pdf_document
+date: "2023-04-12"
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Identifying patterns in ride volume and pricing by neighborhood to tailor 
+# marketing and pricing strategies to high demand areas and adjust pricing 
+# in surge pricing areas from the dataset present in this: 
+
+## We are just loading the dataset
+```{r}
+# Load required libraries
+library(tidyverse)
+
+# Import the dataset
+ride_data <- read.csv("/Users/varsharamesh/Downloads/rideshare_kaggle.csv")
+
+# Display the first few rows of the dataset
+head(dataset)
+
+
+```
+
+## Calculate and visualise the average number of rides per hour by neighborhood and hour
+
+```{r}
+# Calculate the average number of rides per hour by neighborhood and hour
+ride_data <- ride_data %>%
+  filter(!is.na(price)) %>%
+  mutate(hour = hour(datetime))
+rides_by_neighborhood_hour <- ride_data %>%
+  group_by(source, hour) %>%
+  summarize(avg_rides = mean(price)) %>%
+  filter(!is.na(avg_rides))
+
+# Create a heatmap of average rides by neighborhood and hour
+ggplot(rides_by_neighborhood_hour, aes(x = hour, y = source, fill = avg_rides)) +
+  geom_tile() +
+  ggtitle("Average Rides by Neighborhood and Hour") +
+  xlab("Hour") +
+  ylab("Neighborhood") +
+  scale_fill_gradient(low = "white", high = "blue")  # Adjust the color scale
+
+```
+
+```{r}
+rides_by_neighborhood_hour
+```
+From the heatmap we can see that:
+
+Boston University > Fenway > Financial District > Northeastern University>
+Theatre District >  West End > North Station > Back Bay > West End > Beacon Hill
+
+
+## Identify high demand neighborhoods and visualise it
+```{r}
+# Identify high demand neighborhoods
+high_demand_neighborhoods <- rides_by_neighborhood_hour %>%
+  group_by(source) %>%
+  summarize(max_rides = max(avg_rides)) %>%
+  filter(max_rides > 10) %>%
+  select(source)
+
+high_demand_neighborhoods
+
+# Create a bar plot of ride counts by neighborhood
+ggplot(ride_counts, aes(x = source, y = n)) +
+  geom_bar(stat = "identity") +
+  ggtitle("Ride Counts by High Demand Neighborhood") +
+  xlab("Neighborhood") +
+  ylab("Ride Count") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05)))  # Adjust the y-axis limits
+
+```
+
+High Demand neighbourhoods:
+
+Back Bay				
+Beacon Hill				
+Boston University				
+Fenway				
+Financial District				
+Haymarket Square				
+North End				
+North Station				
+Northeastern University				
+South Station
+Theatre District				
+West End
+
+
+```{r}
+# Adjust pricing in high surge and high demand areas
+ride_data$price_adjusted <- ride_data$price
+ride_data$price_adjusted[ride_data$source %in% high_surge_neighborhoods$source] <- ride_data$price_adjusted[ride_data$source %in% high_surge_neighborhoods$source] * 2
+ride_data$price_adjusted[ride_data$source %in% high_demand_neighborhoods$source] <- ride_data$price_adjusted[ride_data$source %in% high_demand_neighborhoods$source] * 1.5
+
+## ride_data$price_adjuste
+```
+
+
+## Calculate the number of rides by neighborhood
+```{r}
+library(ggplot2)
+
+# Calculate the number of rides by neighborhood
+ride_counts <- ride_data %>%
+  filter(source %in% high_demand_neighborhoods$source) %>%
+  count(source) %>%
+  arrange(desc(n))
+
+ride_counts
+
+# Create a bar plot of ride counts by neighborhood
+ggplot(ride_counts, aes(x = source, y = n)) +
+  geom_bar(stat = "identity") +
+  ggtitle("Ride Counts by Neighborhood") +
+  xlab("Neighborhood") +
+  ylab("Ride Count") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05)))  # Adjust the y-axis limits
+
+```
+
+Number of rides per neighbourhood:
+
+Financial District	54197			
+Back Bay	53201			
+Theatre District	53201			
+Boston University	53172			
+North End	53171			
+Fenway	53166			
+Northeastern University	53164			
+South Station	53160			
+Haymarket Square	53147			
+West End	52980	
+Beacon Hill	52841			
+North Station	52576	
+
+
+
+## Visualise adjust pricing in high surge and high demand areas
+```{r}
+library(ggplot2)
+
+# Create a data frame with original prices and adjusted prices
+price_data <- data.frame(original_price = ride_data$price, 
+                         adjusted_price = ride_data$price_adjusted)
+
+price_data
+
+# Create a scatter plot of original prices and adjusted prices
+ggplot(price_data, aes(x = original_price, y = adjusted_price)) +
+  geom_point(alpha = 0.5) +
+  ggtitle("Adjusted Pricing in High Demand and High Surge Areas") +
+  xlab("Original Price") +
+  ylab("Adjusted Price")
+
+```
+
+
+Based on the scatter plot, there appears to be a strong linear relationship between the original prices and adjusted prices, with all data points falling on a straight line. This suggests that the adjusted prices are directly proportional to the original prices. The slope of the line indicates that the adjusted prices are 1.5 times the original prices, which is consistent with the data provided in the table. Overall, the scatter plot supports the conclusion that the adjusted prices are 50% higher than the original prices.
+
+## Building predictive models to estimate future ride prices based on variables such as pickup/drop-off location, time of day, and ride distance.
+
+```{r}
+# Split the data into training and testing sets
+set.seed(123)
+train_index <- sample(1:nrow(ride_data), size = 0.7 * nrow(ride_data), replace = FALSE)
+train_data <- ride_data[train_index, ]
+test_data <- ride_data[-train_index, ]
+
+# Build a linear regression model
+model <- lm(price ~ source + destination + hour + distance, data = train_data)
+
+# Evaluate the model on the testing data
+predictions <- predict(model, newdata = test_data)
+RMSE <- sqrt(mean((test_data$price - predictions)^2))
+cat("Root Mean Squared Error:", RMSE)
+```
+```{r}
+library(ggplot2)
+
+# Create a data frame with actual and predicted prices for the training set
+train_results <- data.frame(actual = train_data$price, predicted = predict(model, newdata = train_data))
+
+# Create a scatter plot of actual versus predicted prices for the training set
+ggplot(train_results, aes(x = actual, y = predicted)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +  # Add a regression line
+  ggtitle("Linear Regression Model: Training Set") +
+  xlab("Actual Price") +
+  ylab("Predicted Price") +
+  xlim(0, max(train_results$actual)) +  # Adjust the x-axis limits
+  ylim(0, max(train_results$predicted))  # Adjust the y-axis limits
+
+# Create a data frame with actual and predicted prices for the testing set
+test_results <- data.frame(actual = test_data$price, predicted = predict(model, newdata = test_data))
+
+# Create a scatter plot of actual versus predicted prices for the testing set
+ggplot(test_results, aes(x = actual, y = predicted)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +  # Add a regression line
+  ggtitle("Linear Regression Model: Testing Set") +
+  xlab("Actual Price") +
+  ylab("Predicted Price") +
+  xlim(0, max(test_results$actual)) +  # Adjust the x-axis limits
+  ylim(0, max(test_results$predicted))  # Adjust the y-axis limits
+
+
+```
+From the visualization of the results of the linear regression model to estimate future ride prices based on variables such as pickup/drop-off location, time of day, and ride distance, it is clear that the model performs reasonably well on the training and testing sets. The scatter plots show a positive linear relationship between the actual and predicted prices, and the red regression lines fit the data well. The RMSE calculated earlier also suggests that the model has a low error rate.
+
+```{r}
+library(caret)
+library(randomForest)
+
+# Split the data into training and testing sets
+set.seed(123)
+train_index <- createDataPartition(ride_data$price, p = 0.7, list = FALSE)
+train_data <- ride_data[train_index, ]
+test_data <- ride_data[-train_index, ]
+
+# Build a linear regression model
+lm_model <- lm(price ~ source + destination + hour + distance, data = train_data)
+
+# Build a decision tree model
+dt_model <- train(price ~ source + destination + hour + distance, method = "rpart", data = train_data)
+
+# Build a random forest model
+rf_model <- randomForest(price ~ source + destination + hour + distance, data = train_data)
+
+# Evaluate the models on the testing data
+lm_predictions <- predict(lm_model, newdata = test_data)
+lm_RMSE <- sqrt(mean((test_data$price - lm_predictions)^2))
+
+dt_predictions <- predict(dt_model, newdata = test_data)
+dt_RMSE <- sqrt(mean((test_data$price - dt_predictions)^2))
+
+rf_predictions <- predict(rf_model, newdata = test_data)
+rf_RMSE <- sqrt(mean((test_data$price - rf_predictions)^2))
+
+# Print the RMSE for each model
+cat("Linear Regression RMSE:", lm_RMSE, "\n")
+cat("Decision Tree RMSE:", dt_RMSE, "\n")
+cat("Random Forest RMSE:", rf_RMSE, "\n")
+```
+
+```{r}
+install.packages("randomForest")
+```
+
+```{r}
+library(ggplot2)
+
+# Build a linear regression model
+lm_model <- lm(price ~ source + destination + hour + distance, data = train_data)
+
+# Build a decision tree model
+dt_model <- train(price ~ source + destination + hour + distance, method = "rpart", data = train_data)
+
+# Build a random forest model
+rf_model <- randomForest(price ~ source + destination + hour + distance, data = train_data, ntree = 50)
+
+
+# Create a data frame with actual and predicted prices for the testing set for each model
+lm_results <- data.frame(actual = test_data$price, predicted = predict(lm_model, newdata = test_data))
+dt_results <- data.frame(actual = test_data$price, predicted = predict(dt_model, newdata = test_data))
+rf_results <- data.frame(actual = test_data$price, predicted = predict(rf_model, newdata = test_data))
+
+# Create a scatter plot of actual versus predicted prices for each model
+ggplot(lm_results, aes(x = actual, y = predicted)) +
+  geom_point(alpha = 0.5, color = "blue") +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +  # Add a regression line
+  ggtitle("Linear Regression Model: Testing Set") +
+  xlab("Actual Price") +
+  ylab("Predicted Price") +
+  xlim(0, max(test_data$price)) +  # Adjust the x-axis limits
+  ylim(0, max(lm_results$predicted))  # Adjust the y-axis limits
+
+ggplot(dt_results, aes(x = actual, y = predicted)) +
+  geom_point(alpha = 0.5, color = "blue") +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +  # Add a regression line
+  ggtitle("Decision Tree Model: Testing Set") +
+  xlab("Actual Price") +
+  ylab("Predicted Price") +
+  xlim(0, max(test_data$price)) +  # Adjust the x-axis limits
+  ylim(0, max(dt_results$predicted))  # Adjust the y-axis limits
+
+ggplot(rf_results, aes(x = actual, y = predicted)) +
+  geom_point(alpha = 0.5, color = "blue") +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +  # Add a regression line
+  ggtitle("Random Forest Model: Testing Set") +
+  xlab("Actual Price") +
+  ylab("Predicted Price") +
+  xlim(0, max(test_data$price)) +  # Adjust the x-axis limits
+  ylim(0, max(rf_results$predicted))  # Adjust the y-axis limits
+
+```
+
