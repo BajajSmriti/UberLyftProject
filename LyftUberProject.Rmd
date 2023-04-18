@@ -230,7 +230,7 @@ ggplot(corr_df, aes(x = variable1, y = variable2, fill = correlation)) +
 
 ```
 
-From the correlation matrix we can see there is positive correlation between distance and surge multiplier. There is no correlation observed between price and other variables, including weather. 
+From the correlation matrix we can see that there is positive correlation of distance and surge multiplier with price. There is no correlation observed between price and other variables, including weather. Hence, weather does not appear to impact ride prices.
 
 ## 3. Feature selection
 
