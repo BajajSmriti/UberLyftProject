@@ -41,6 +41,7 @@ data <- read_csv("rideshare_kaggle.csv")
 head(data)
 colnames(data)
 ```
+
 ```{r}
 # Create a column for the date
 data$datetime <- anytime(data$datetime)
@@ -64,6 +65,7 @@ data %>%
   summarise_all(~ sum(is.na(.)))
 
 ```
+
 From the above, we can see that there are missing values in the price column for 55095 rows which account for ~8% of the total dataset. We can drop these rows.
 
 ```{r}
@@ -128,7 +130,7 @@ A similar trend is observed in the variation of average price by the hour of the
 ```{r}
 # Plot the average price by hour of the day
 ggplot(data, aes(x = hour, y = price)) +
-  geom_point(stat = "summary", fun = "mean", size = 3, color = "cornflowerblue") +
+  geom_line(stat = "summary", fun = "mean", size = 1, color = "cornflowerblue") +
   labs(title = "Average ride price by hour of the day", x = "Hour of the day", y = "Price ($)")
 ```
 
@@ -143,7 +145,16 @@ ggplot(data, aes(x = distance, y = price)) +
 
 ```
 
-The scatter plot shows a positive correlation between price and distance, which means that longer rides tend to be more expensive.
+The scatter plot shows a positive correlation between price and distance, which means that longer rides tend to be more expensive. There is also overplotting issue in the above graph.
+
+```{r}
+ggplot(data, aes(x = distance, y = price)) + 
+  geom_point(alpha=1/100) + 
+  geom_smooth(method = "lm", se = FALSE) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
+  labs(x = "Distance (miles)", y = "Price", title = "Price variation by Distance")
+
+```
 
 4. Is there a difference in pricing between Uber and Lyft in Boston?
 
@@ -179,7 +190,6 @@ labs(x = "Surge Multiplier", y = "Price", title = "Effect of Surge Multiplier on
 ```
 
 The scatter plot shows a positive correlation between surge multiplier and price, which means that surge pricing significantly affects the price of an Uber/Lyft ride.
-
 
 6. How does weather impact ride-hailing patterns and pricing?
 
@@ -222,216 +232,6 @@ ggplot(corr_df, aes(x = variable1, y = variable2, fill = correlation)) +
 
 From the correlation matrix we can see there is positive correlation between distance and surge multiplier. There is no correlation observed between price and other variables, including weather. 
 
+## 3. Feature selection
 
-
-
-
-
-## 3. Feature selection and implementation of linear regression model - Under development
-
-Based on the EDA, we can choose distance, surge multiplier, cab provider (lyft/uber), and hour of day as features for the linear regression model.
-
-```{r}
-# recode cab_type
-# data <- data %>%
-# mutate(cab_type = ifelse(cab_type == "Uber", 1, 2))
-# head(data)
-
-# create dummy variables for cab provider
-data <- data %>%
-mutate(is_uber = ifelse(cab_type == "Uber", 1, 0))
-
-```
-
-
-
-```{r message=FALSE}
-library(caret)
-
-predictors <- data %>% select(price, distance, surge_multiplier, hour_of_day, is_uber)
-
-# Set the seed for reproducibility
-set.seed(123)
-
-# Split the data into training and test sets
-train_idx <- createDataPartition(predictors$price, p = 0.5, list = FALSE)
-train <- predictors[train_idx, ]
-test <- predictors[-train_idx, ]
-
-# Initialize variables to store the best predictor and its RMSE
-best_predictor <- ""
-best_rmse <- Inf
-# print(predictors)
-# Loop through each predictor and evaluate its RMSE on the test set
-for (col in names(train)[-1]) {
-
-  # Create the formula for the model
-  formula <- as.formula(paste("price ~", col))
- 
-  # Build a linear regression model using the training set
-  model <- caret::train(formula, data = train, method = "lm",
-              preProcess="medianImpute", trControl = trainControl(method = "none"))
-
-  # Make predictions on the test set
-  predictions <- predict(model, newdata = test)
-
-  # Calculate the RMSE on the test set
-  rmse <- sqrt(mean((test$price - predictions)^2))
-
-  # Check if this predictor results in a lower RMSE than the current best
-  if (rmse < best_rmse) {
-    best_predictor <- col
-    best_rmse <- rmse
-    # Create a data frame with the predicted values and the actual values
-    model_data <- data.frame(predicted = predictions, actual = test$price)
-  }
-}
-
-# Print the best predictor and its RMSE on the test set
-cat("Best predictor:", best_predictor, "\n")
-cat("RMSE:", best_rmse, "\n")
-
-# new_data <- data.frame(distance = 5, surge_multiplier = 1, is_uber = 1)
-# predicted_price <- predict(model, new_data)
-# 
-# print(predicted_price)
-
-
-```
-
-```{r}
-# Initialize variables to store the best predictors and their RMSE
-best_predictors <- c()
-best_rmse <- Inf
-
-# set seed for reproducibility
-set.seed(123)
-
-# Loop through each additional predictor and evaluate its RMSE on the test set
-for (predictor in c("surge_multiplier", "hour_of_day", "is_uber")) {
-  
-  # Update the formula for the model with the additional predictor
-  new_formula <- paste("price ~ distance +", predictor)
-  formula <- as.formula(new_formula)
-  
-  # Build a linear regression model using the training set
-  model <- train(formula, data = train, method = "lm", trControl = trainControl(method = "none"))
-  
-  # Make predictions on the test set
-  predictions <- predict(model, newdata = test)
-  
-  # Calculate the RMSE on the test set
-  rmse <- sqrt(mean((test$price - predictions)^2))
-  
-  # Check if this predictor combination results in a lower RMSE than the current best
-  if (rmse < best_rmse) {
-    best_predictors <- c("distance", predictor)
-    best_rmse <- rmse
-    # Create a data frame with the predicted values and the actual values
-    model_data <- data.frame(predicted = predictions, actual = test$price)
-  }
-}
-
-# Print the best predictors and their RMSE on the test set
-print(paste("Best predictors:", paste(best_predictors, collapse = ", ")))
-print(paste("RMSE:", best_rmse))
-
-```
-
-```{r}
-# Initialize variables to store the best predictors and their RMSE
-best_predictors <- c()
-best_rmse <- Inf
-
-# set seed for reproducibility
-set.seed(123)
-
-# Loop through each additional predictor and evaluate its RMSE on the test set
-for (predictor in c("hour_of_day", "is_uber")) {
-  
-  # Update the formula for the model with the additional predictor
-  new_formula <- paste("price ~ distance + surge_multiplier + ", predictor)
-  formula <- as.formula(new_formula)
-  
-  # Build a linear regression model using the training set
-  model <- train(formula, data = train, method = "lm", trControl = trainControl(method = "none"))
-  
-  # Make predictions on the test set
-  predictions <- predict(model, newdata = test)
-  
-  # Calculate the RMSE on the test set
-  rmse <- sqrt(mean((test$price - predictions)^2))
-  
-  # Check if this predictor combination results in a lower RMSE than the current best
-  if (rmse < best_rmse) {
-    best_predictors <- c("distance", "surge_multiplier", predictor)
-    best_rmse <- rmse
-    # Create a data frame with the predicted values and the actual values
-    model_data <- data.frame(predicted = predictions, actual = test$price)
-  }
-}
-
-# Print the best predictors and their RMSE on the test set
-print(paste("Best predictors:", paste(best_predictors, collapse = ", ")))
-print(paste("RMSE:", best_rmse))
-
-```
-
-```{r}
-# Initialize variables to store the best predictors and their RMSE
-best_predictors <- c()
-best_rmse <- Inf
-
-# set seed for reproducibility
-set.seed(123)
-
-# Update the formula for the model with the additional predictor
-new_formula <- paste("price ~ distance + surge_multiplier + is_uber + hour_of_day")
-formula <- as.formula(new_formula)
-
-# Build a linear regression model using the training set
-model <- train(formula, data = train, method = "lm", trControl = trainControl(method = "none"))
-
-# Make predictions on the test set
-predictions <- predict(model, newdata = test)
-
-# Calculate the RMSE on the test set
-rmse <- sqrt(mean((test$price - predictions)^2))
-
-# Check if this predictor combination results in a lower RMSE than the current best
-if (rmse < best_rmse) {
-  best_predictors <- c("distance", "surge_multiplier", "is_uber", "hour_of_day")
-  best_rmse <- rmse
-  # Create a data frame with the predicted values and the actual values
-  model_data <- data.frame(predicted = predictions, actual = test$price)
-}
-
-
-# Print the best predictors and their RMSE on the test set
-print(paste("Best predictors:", paste(best_predictors, collapse = ", ")))
-print(paste("RMSE:", best_rmse))
-
-```
-
-As we can see from the above experiments, the RMSE value progressively decreases with the addition of each additional predictor from 8.745 with distance, 8.47626 with distance and surge_multiplier and 8.4649430 after adding is_uber to the predictor combination. However, adding the 4th predictor - hour_of_day increases the RMSE value to 8.4649477, indicating that it causes overfitting problems. Hence, we will build the model with 3 predictors for predicting price of the ride - distance, surge_multiplier and is_uber.
-
-```{r}
-model <- lm(price ~ distance + surge_multiplier + is_uber, data = data)
-# summarize model
-summary(model)
-```
-The summary of the linear regression model shows that all the selected features are significant predictors of price, and the model has an R-squared value of 0.1749, which means that it explains 17.49% of the variability in the data. 
-
-```{r}
-new_data <- data.frame(distance = 5, surge_multiplier = 1.5, hour_of_day = 20, is_uber = 1) #uber ride
-predicted_price <- predict(model, new_data)
-print(predicted_price)
-
-new_data <- data.frame(distance = 5, surge_multiplier = 1.5, hour_of_day = 20, is_uber = 0) #lyft ride
-predicted_price <- predict(model, new_data)
-print(predicted_price)
-```
-
-
-
-The predicted price for this ride is $34.55. We can also use the model to identify which features have the most significant impact on the price. From the coefficients of the model, we can see that distance has the highest positive effect on price, followed by surge multiplier and being a Lyft ride. Being an Uber ride has a negative effect on price, but the effect is relatively small compared to the other features. Hour of day also has a small positive effect on price.
+Based on the EDA, we can choose distance, surge multiplier, cab provider (lyft/uber), and hour of day as candidate predictors. 
