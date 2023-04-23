@@ -1,0 +1,107 @@
+---
+title: "Project Mark - 1"
+output: html_document
+date: "2023-04-07"
+---
+
+```{r}
+install.packages("caret")
+library(caret)
+# Load the dataset
+data <- read.csv("rideshare_kaggle 2.csv")
+
+```
+
+
+Checking the correlation of temperature related feature with Price.
+
+```{r}
+cor_matrix <- cor(data[, c('temperature','apparentTemperature','temperatureHigh','temperatureLow','apparentTemperatureHigh',
+                'apparentTemperatureLow','temperatureMin','temperatureHighTime','temperatureMax','apparentTemperatureMin','apparentTemperatureMax','price')])
+# Visualize the correlation matrix as a heatmap
+library(ggplot2)
+library(reshape2)
+melted_cor <- melt(cor_matrix)
+ggplot(melted_cor, aes(x=Var1, y=Var2, fill=value)) +
+  geom_tile() +
+  scale_fill_gradient2(low="blue", high="red", mid="white", midpoint=0, limit=c(-1,1), space="Lab", name="Pearson\nCorrelation") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+Checking the correlation of climate related features with price.
+
+```{r}
+cor_matrix <- cor(data[, c('precipIntensity', 'precipProbability', 'humidity', 'windSpeed',
+       'windGust', 'visibility', 'dewPoint', 'pressure', 'windBearing',
+       'cloudCover', 'uvIndex', 'ozone', 'moonPhase',
+       'precipIntensityMax','price')])
+# Visualize the correlation matrix as a heatmap
+library(ggplot2)
+library(reshape2)
+melted_cor <- melt(cor_matrix)
+ggplot(melted_cor, aes(x=Var1, y=Var2, fill=value)) +
+  geom_tile() +
+  scale_fill_gradient2(low="blue", high="red", mid="white", midpoint=0, limit=c(-1,1), space="Lab", name="Pearson\nCorrelation") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+```{r}
+
+sum(is.na(data))
+```
+
+```{r}
+df <- na.omit(data)
+
+```
+```{r}
+
+sum(is.na(df))
+```
+```{r}
+
+category_col <- names(df)[sapply(df, is.character) | sapply(df, is.factor)]
+for (column in category_col) {
+  paste0(column, " : ", unique(df[[column]]), "\n\n")
+}
+
+```
+
+
+```{r}
+
+library(dplyr)
+library(tidyr)
+library(forcats)
+data_dummy <- df %>%
+  select(source, destination, cab_type, name, short_summary, icon, price)
+df_cat_encode <- data_dummy%>%
+  mutate(across(where(is.character), as.factor)) %>%
+  mutate(across(where(is.factor), as.numeric))
+
+for(col in names(df_cat_encode)[sapply(df_cat_encode, is.factor)]) {
+  df_cat_encode[[col]] <- as.numeric(as.factor(df_cat_encode[[col]]))
+}
+
+
+library(ggplot2)
+library(reshape2)
+
+corr_mat <- cor(df_cat_encode)
+corr_mat_melted <- melt(corr_mat)
+
+ggplot(corr_mat_melted, aes(x=Var1, y=Var2, fill=value)) +
+  geom_tile(color="white") +
+  scale_fill_gradient2(low = "red", mid = "white", high = "blue", midpoint = 0) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  ggtitle("Correlation Heatmap") +
+  xlab("Variables") +
+  ylab("Variables") 
+
+
+```
+
+
