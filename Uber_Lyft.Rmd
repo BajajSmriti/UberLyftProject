@@ -1,5 +1,6 @@
 ---
 title: "Uber_Lyft.Rmd"
+author: "Smriti Bajaj"
 output:
   pdf_document: default
   html_document: default
@@ -122,6 +123,12 @@ model1 <- randomForest(price ~ ., data = TrainSet, ntree = 100, importance = TRU
 modelr::rmse(model1, data=TestSet)
 ```
 
+```{r}
+# Create diagnostic plots for the random forest model
+par(mfrow=c(2,2))
+plot(model1)
+```
+
 
 ```{r}
 # Building Linear regression model
@@ -132,6 +139,13 @@ model2 <- lm(price ~ ., data = TrainSet)
 ```{r}
 # summary(model2)[["r.squared"]]
 modelr::rmse(model2, data=TestSet)
+```
+
+
+```{r}
+# Create diagnostic plots for the linear regression model
+par(mfrow=c(2,2))
+plot(model2)
 ```
 
 
