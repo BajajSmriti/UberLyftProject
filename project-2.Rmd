@@ -1,0 +1,71 @@
+---
+title: "Project"
+output: html_document
+date: "2023-04-10"
+---
+
+```{r}
+install.packages("caret")
+library(caret)
+# Load the dataset
+data <- read.csv("rideshare_kaggle 2.csv")
+```
+Let's get the summary of our data first.
+```{r}
+
+summary(data)
+str(data)
+```
+Selecting the features that we need.
+```{r}
+library(dplyr)
+
+data_dataset <- data %>%
+                  select(datetime, cab_type, price, source, destination, distance, surge_multiplier, name)
+
+```
+Some necessary pre-processing.
+```{r}
+
+uber_lyft_avg_fare <- data_dataset %>%
+                      group_by(cab_type, name, distance, datetime) %>%
+                      summarize(avg_price = mean(price))
+
+```
+Now, let's get to the visualization
+```{r}
+
+library(ggplot2)
+
+ggplot(uber_lyft_avg_fare, aes(x = distance, y = avg_price, color = cab_type)) +
+  geom_line() +
+  facet_grid(. ~ cab_type) +
+  labs(x = "Distance (miles)", y = "Average Fare ($)", title = "Comparison of Uber and Lyft Pricing Strategies") +
+  scale_color_manual(values = c("red", "blue"))
+
+```
+
+```{r}
+
+uber_lyft_avg_fare <- data_dataset %>%
+                      group_by(cab_type, name, distance, datetime, surge_multiplier) %>%
+                      summarize(avg_price = mean(price))
+
+```
+Comparing surge multiplier strategy.
+
+```{r}
+surge_data <- data %>% 
+  select(cab_type, surge_multiplier) %>% 
+  filter(!is.na(surge_multiplier))
+
+surge_by_company <- surge_data %>% 
+  group_by(cab_type) %>% 
+  summarise(avg_surge = mean(surge_multiplier))
+
+ggplot(surge_by_company, aes(x = cab_type, y = avg_surge, fill = cab_type)) + 
+  geom_bar(stat = "identity", position = "dodge") + 
+  labs(title = "Surge Pricing Comparison: Uber vs Lyft", x = "Company", y = "Average Surge Multiplier") + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+```
